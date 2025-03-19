@@ -10,25 +10,21 @@ import sqlite3
 from dotenv import load_dotenv
 load_dotenv()
 
-OPENAI_API_KEY = "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"
-ELEVENLABS_API_KEY ="sk_870a763612522937db97dc08e24c2ed4543bc05c9343c110"
+OPENAI_API_KEY = "key"
+ELEVENLABS_API_KEY = "key"
 
 
-# Path to the database
-DB_PATH = r"C:\Users\relle\OneDrive\Desktop\Agora\Database\MemoriaFM.db"
-AUDIO_FOLDER_PATH = r"C:\Users\relle\OneDrive\Desktop\Agora\Audio_Recordings"
-VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Replace with the desired voice ID
+
+DB_PATH = r"C:mypath"
+AUDIO_FOLDER_PATH = r"C:\mypath"
+VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   
 MODEL_ID = "eleven_multilingual_v2"
 
 def normalize_file_name(file_name):
-    """
-    Normalize the file name to a consistent format.
-    For example, convert to lowercase.
-    """
     return file_name.lower()
 
 
-# Function to connect to the database
+
 def connect_to_db(db_path):
     conn = sqlite3.connect(db_path)
     return conn
@@ -70,7 +66,7 @@ def is_file_processed(db_path, file_name):
     return result is not None
 
 def mark_file_as_processed(db_path, file_name):
-    normalized_name = normalize_file_name(file_name)  # Use the global function
+    normalized_name = normalize_file_name(file_name) 
     print(f"Marking file as processed: {normalized_name}")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -78,13 +74,13 @@ def mark_file_as_processed(db_path, file_name):
     conn.commit()
     conn.close()
 
-# Function to calculate cosine similarity
+
 def cosine_similarity(vec1, vec2):
     dot_product = np.dot(vec1, vec2)
     norm_vec1 = np.linalg.norm(vec1)
     norm_vec2 = np.linalg.norm(vec2)
     return dot_product / (norm_vec1 * norm_vec2)
-# Function to generate an embedding for the transcription
+
 
 def generate_embedding(text, model="text-embedding-ada-002"):
     """
@@ -102,7 +98,7 @@ def generate_embedding(text, model="text-embedding-ada-002"):
 
     try:
         response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()  # Raise an error for HTTP issues
+        response.raise_for_status()  
         embedding = response.json()["data"][0]["embedding"]
         print(f"Generated embedding for text: {text[:50]}...")
         return np.array(embedding, dtype=np.float32)
@@ -111,9 +107,6 @@ def generate_embedding(text, model="text-embedding-ada-002"):
         return None
 
 def transcribe_audio(file_path):
-    """
-    Transcribe audio using OpenAI's Whisper model via HTTPS.
-    """
     url = "https://api.openai.com/v1/audio/transcriptions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}"
@@ -123,13 +116,10 @@ def transcribe_audio(file_path):
     }
 
     try:
-        # Open the audio file in binary mode
         with open(file_path, "rb") as audio_file:
-            # Make the HTTPS POST request
             response = requests.post(url, headers=headers, data=data, files={"file": audio_file})
-            response.raise_for_status()  # Raise an error for HTTP issues
+            response.raise_for_status()  
 
-            # Extract the transcription text from the response
             transcription = response.json()["text"]
             print(f"Transcription: {transcription[:50]}...")
             return transcription
@@ -142,16 +132,13 @@ def transcribe_audio(file_path):
 
 def generate_category_name(transcription):
     try:
-        # OpenAI API endpoint
         url = "https://api.openai.com/v1/chat/completions"
 
-        # Headers for the HTTPS request
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
             "Content-Type": "application/json"
         }
 
-        # Data payload for the HTTPS request
         data = {
             "model": "gpt-3.5-turbo",
             "messages": [
@@ -168,11 +155,9 @@ def generate_category_name(transcription):
             "temperature": 0.7
         }
 
-        # Make the HTTPS request
         response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()  # Raise an error for HTTP issues
+        response.raise_for_status()  
 
-        # Parse the JSON response
         category_name = response.json()["choices"][0]["message"]["content"].strip()
         print(f"Generated category name: {category_name}")
         return category_name
@@ -185,25 +170,17 @@ def generate_category_name(transcription):
         return "Unnamed Category"
 
 def create_new_category(db_path, embedding, transcription):
-    """
-    Create a new category in the database and generate its audio name.
-    """
-    # Step 1: Generate a category name using the transcription
     category_name = generate_category_name(transcription)
 
-    # Step 2: Define the audio file path
     sanitized_name = category_name.replace(" ", "_").lower()
     base_dir = r"C:\Users\relle\OneDrive\Desktop\Agora\CategoryAudio"
 
     audio_file_path = os.path.join(base_dir, f"{sanitized_name}.mp3")
 
-    # Ensure the audio directory exists
     os.makedirs(os.path.dirname(audio_file_path), exist_ok=True)
 
-    # Step 3: Generate the category name audio
     generate_category_audio(category_name, audio_file_path)
 
-    # Step 4: Insert the new category into the database
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -220,17 +197,12 @@ def create_new_category(db_path, embedding, transcription):
     return new_category_id
 
 def assign_or_create_category(db_path, embedding, transcription, threshold=0.50):
-    """
-    Assign a recording to an existing category or create a new category.
-    """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Fetch all categories
     cursor.execute('SELECT id, name, embedding FROM categories')
     categories = cursor.fetchall()
 
-    # Compare with existing categories
     for category in categories:
         category_id = category[0]
         category_name = category[1]
@@ -244,11 +216,9 @@ def assign_or_create_category(db_path, embedding, transcription, threshold=0.50)
             print(f"Matched existing category: {category_name} (ID {category_id})")
             return category_id
 
-    # If no match found, create a new category
     conn.close()
     return create_new_category(db_path, embedding, transcription)
 
-# Function to store the recording's metadata into the database
 def save_to_recordings(db_path, transcription, embedding, category_id, file_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -265,7 +235,6 @@ def save_to_recordings(db_path, transcription, embedding, category_id, file_path
     conn.close()
     print(f"Recording metadata with file_path '{file_path}' successfully inserted into the database.")
 
-# Function to update the category_id in the recordings table
 def update_recording_category(db_path, recording_id, category_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -289,24 +258,22 @@ def generate_category_audio(category_name, output_file):
 
         print(f"Generating audio for category '{category_name}' with output to '{output_file}'.")
 
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)  # Ensure ElevenLabs is correctly imported
+        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)  
         audio_generator = client.text_to_speech.convert(
             voice_id=VOICE_ID,
             model_id=MODEL_ID,
             text=category_name,
         )
 
-        # Save the audio data to the file
         with open(output_file, "wb") as f:
             for chunk in audio_generator:
-                f.write(chunk)  # Write each chunk of audio data
+                f.write(chunk)  
         print(f"Audio for category '{category_name}' saved to {output_file}")
     except Exception as e:
         print(f"Error generating audio for category '{category_name}': {e}")
         raise
 
 def process_audio_and_store_with_category(file_path, db_path):
-    # Step 1: Transcribe the audio
     transcription = transcribe_audio(file_path)
     if not transcription:
         print("Error: Could not transcribe audio.")
@@ -314,16 +281,13 @@ def process_audio_and_store_with_category(file_path, db_path):
 
     print(f"Transcription: {transcription}")
 
-    # Step 2: Generate the embedding
     embedding = generate_embedding(transcription)
     if embedding is None:
         print("Error: Could not generate embedding.")
         return
 
-    # Step 3: Assign or create a category
     category_id = assign_or_create_category(db_path, embedding, transcription)
 
-    # Step 4: Save the recording metadata, including file_path
     save_to_recordings(db_path, transcription, embedding, category_id, file_path)
 
 def check_processed_files_table(db_path):
