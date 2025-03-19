@@ -11,21 +11,18 @@ from mutagen import File
 from mutagen.mp4 import MP4
 import subprocess
 
-# Paths to database and audio files
-DB_PATH = r"C:\Users\relle\OneDrive\Desktop\Agora\Database\MemoriaFM.db"
-RAW_WAV_FOLDER = r"C:\Users\relle\OneDrive\Desktop\Agora\Raw_Wav"
+DB_PATH = r"mypath"
+RAW_WAV_FOLDER = r"mypath"
 
-# Shared state
 rotation_counts = Queue()
 recording_active = False
 recording_stream = None
-recording_frames = []  # To store audio frames during recording
+recording_frames = []  
 audio = pyaudio.PyAudio()
 
 def stop_current_audio():
-    """Stop the current audio playback by killing the audio player process."""
     for process in psutil.process_iter(attrs=["pid", "name"]):
-        if process.info["name"] in ["Microsoft.Media.Player.exe"]:  # Adjust for the default audio player
+        if process.info["name"] in ["Microsoft.Media.Player.exe"]:  
             print(f"Stopping audio player process with PID: {process.info['pid']}")
             process.terminate()
             try:
@@ -37,7 +34,6 @@ def stop_current_audio():
     print("No audio player process found to stop.")
 
 def get_audio_duration(file_path):
-    """Retrieve the duration of an audio file in seconds using ffprobe."""
     try:
         command = [
             "ffprobe",
@@ -60,13 +56,9 @@ def get_audio_duration(file_path):
         return None
 
 def play_category_name_audio(category_id, db_path):
-    """
-    Fetch the name audio path for the given category ID and play it if it exists.
-    """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Fetch the name audio path for the category
     cursor.execute("SELECT name_audio_path FROM categories WHERE id = ?", (category_id,))
     result = cursor.fetchone()
     conn.close()
@@ -84,23 +76,21 @@ def play_category_name_audio(category_id, db_path):
     try:
         os.startfile(name_audio_path)
 
-        # Wait for the duration of the audio or detect user interruption
         duration = get_audio_duration(name_audio_path)
         if duration:
             print(f"Category name audio duration: {duration:.2f} seconds")
-            time.sleep(duration)  # Wait for the duration of the audio to finish
+            time.sleep(duration)  
         else:
             print("Could not determine the duration of the category name audio.")
     except Exception as e:
         print(f"Error playing category name audio: {e}")
 
 def start_recording():
-    """Start recording audio from the microphone."""
     global recording_stream, recording_frames, recording_active
 
     print("Starting recording...")
-    recording_frames = []  # Reset the frame buffer
-    recording_active = True  # Ensure the recording thread stays active
+    recording_frames = []  
+    recording_active = True  
     try:
         recording_stream = audio.open(format=pyaudio.paInt16,
                                        channels=1,
@@ -110,7 +100,7 @@ def start_recording():
         print("Recording stream opened successfully.")
     except Exception as e:
         print(f"Failed to open recording stream: {e}")
-        recording_active = False  # Fail-safe
+        recording_active = False 
 
     def record():
         print("Recording thread started.")
@@ -127,12 +117,11 @@ def start_recording():
     Thread(target=record, daemon=True).start()
 
 def stop_recording():
-    """Stop the recording process and save the audio to a file."""
     global recording_stream, recording_frames, recording_active
 
     print("Stopping recording...")
     print(f"Recording active state before stopping: {recording_active}")
-    recording_active = False  # Ensure the recording thread stops
+    recording_active = False  
 
     if recording_stream:
         print("Stopping recording stream...")
@@ -140,7 +129,7 @@ def stop_recording():
         recording_stream.close()
         recording_stream = None
 
-        # Save the recorded data to a WAV file
+        
         recording_file = os.path.join(RAW_WAV_FOLDER, "temp_recording.wav")
         if recording_frames:
             try:
@@ -158,13 +147,8 @@ def stop_recording():
         print("Recording stream was not active.")
 
 def playback_audio_with_navigation(category_id, mode, db_path):
-    """
-    Play category name audio (if exists) and then audio sequentially based on the selected category and mode.
-    """
-    # Play the category name audio first
     play_category_name_audio(category_id, db_path)
 
-    # Fetch recordings in the category
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -190,7 +174,6 @@ def playback_audio_with_navigation(category_id, mode, db_path):
 
     print(f"Playing {len(audio_files)} files in {mode} mode.")
     for track_id, file_path in audio_files:
-        # Check if a new rotation count interrupts the playback
         if not rotation_counts.empty():
             print("New rotation detected during playback. Stopping current category.")
             break
@@ -202,25 +185,21 @@ def playback_audio_with_navigation(category_id, mode, db_path):
         try:
             print(f"Now playing: {file_path} (Track ID: {track_id})")
 
-            # Get the duration of the audio file
             duration = get_audio_duration(file_path)
             if duration is None:
                 print(f"Skipping {file_path} due to missing duration.")
                 continue
 
-            # Start playback with the system's default audio player
             os.startfile(file_path)
 
-            # Wait for the duration of the file or detect an interruption
             start_time = time.time()
             while time.time() - start_time < duration:
                 if not rotation_counts.empty():
                     print("New rotation detected during playback. Interrupting current audio.")
-                    return  # Exit playback loop to handle new category
+                    return  
 
-                time.sleep(0.1)  # Check every 100ms
+                time.sleep(0.1)  
 
-            # Add a small gap before the next file
             time.sleep(0.5)
 
         except Exception as e:
@@ -230,7 +209,6 @@ def playback_audio_with_navigation(category_id, mode, db_path):
     print("Finished playing all files in the current category.")
 
 def serial_worker(serial_port, baud_rate=9600):
-    """Handle serial communication with the Arduino."""
     global recording_active, recording_frames
 
     try:
@@ -244,21 +222,21 @@ def serial_worker(serial_port, baud_rate=9600):
                     if message == "Microphone Activated":
                         if not recording_active:
                             print("Starting recording...")
-                            stop_current_audio()  # Interrupt playback
-                            start_recording()  # Begin recording
+                            stop_current_audio()  
+                            start_recording()  
                             recording_active = True
 
                     elif message == "Microphone Deactivated":
                         if recording_active:
                             print("Stopping recording...")
-                            stop_recording()  # Stop recording and save file
+                            stop_recording()  
                             recording_active = False
 
                     elif message.startswith("Rotation Count:"):
                         try:
                             count = int(message.split(":")[1].strip())
                             print(f"Queueing rotation count: {count}")
-                            rotation_counts.put(count)  # Push the new rotation count
+                            rotation_counts.put(count)  
                         except (ValueError, IndexError):
                             print(f"Error parsing rotation count: {message}")
 
@@ -266,10 +244,6 @@ def serial_worker(serial_port, baud_rate=9600):
         print(f"Error communicating with Arduino: {e}")
 
 def playback_worker():
-    """
-    Continuously monitors the rotation_counts queue and handles playback.
-    Allows interruptions to switch categories dynamically.
-    """
     current_category_id = None
     last_rotation_count = None
     is_playing = False
@@ -278,12 +252,10 @@ def playback_worker():
         if not rotation_counts.empty():
             new_category_id = rotation_counts.get()
 
-            # Debounce to prevent repeated triggers
             if new_category_id == last_rotation_count:
                 continue
             last_rotation_count = new_category_id
 
-            # Stop current playback and switch to the new category
             if new_category_id != current_category_id:
                 if is_playing:
                     print("Interrupting current playback to switch category.")
@@ -295,16 +267,12 @@ def playback_worker():
                 playback_audio_with_navigation(current_category_id, "topic", DB_PATH)
                 is_playing = True
 
-# The rest of the functions remain unchanged (serial_worker, etc.).
-# Threads
 serial_thread = Thread(target=serial_worker, args=("COM8 ",), daemon=True)
 playback_thread = Thread(target=playback_worker, daemon=True)
 
-# Start threads
 serial_thread.start()
 playback_thread.start()
 
-# Keep the main thread alive
 try:
     print("Playback Bridge is running. Press Ctrl+C to exit.")
     while True:
